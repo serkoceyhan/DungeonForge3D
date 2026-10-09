@@ -1,0 +1,1618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DungeonForge — Procedural Map Ideation Tool</title>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STYLES — glassmorphism control panel over a dark 3D viewport
+     ═══════════════════════════════════════════════════════════════════════ -->
+<style>
+  :root {
+    --bg-0:      #07080d;
+    --glass:     rgba(19, 23, 36, 0.58);
+    --glass-2:   rgba(255, 255, 255, 0.05);
+    --brd:       rgba(255, 255, 255, 0.10);
+    --txt:       #e6e9f2;
+    --dim:       #8a92ad;
+    --accent:    #00e5ff;
+    --exit:      #ff2d95;
+    --prop:      #ffb347;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: var(--bg-0); color: var(--txt);
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 5;
+    background: radial-gradient(ellipse at 52% 46%,
+                rgba(0,0,0,0) 32%, rgba(0,0,0,0.6) 100%);
+  }
+
+  /* ── Panel shell ────────────────────────────────────────────────────── */
+  #panel {
+    position: fixed; top: 20px; left: 20px; z-index: 10;
+    width: 300px; max-height: calc(100vh - 40px);
+    overflow-y: auto; overscroll-behavior: contain;
+    padding: 18px;
+    background: var(--glass);
+    border: 1px solid var(--brd);
+    border-radius: 18px;
+    backdrop-filter: blur(24px) saturate(155%);
+    -webkit-backdrop-filter: blur(24px) saturate(155%);
+    box-shadow: 0 18px 55px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.07);
+    user-select: none;
+  }
+  #panel::-webkit-scrollbar { width: 5px; }
+  #panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 3px; }
+
+  .brand { display: flex; align-items: center; gap: 9px; }
+  .brand .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 11px var(--accent), 0 0 24px var(--accent);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.75)} }
+  .brand h1 { font-size: 15px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .brand h1 span { color: var(--accent); }
+  .tagline {
+    font-size: 9.5px; color: var(--dim); letter-spacing: .1em;
+    text-transform: uppercase; margin: 3px 0 16px;
+  }
+
+  /* ── Section headers ────────────────────────────────────────────────── */
+  .sect {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 8.5px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--dim); margin: 18px 0 11px;
+  }
+  .sect::after { content: ''; flex: 1; height: 1px; background: var(--brd); }
+  .sect:first-of-type { margin-top: 0; }
+
+  /* ── Fields ─────────────────────────────────────────────────────────── */
+  .field { margin-bottom: 13px; }
+  .field label {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--dim); margin-bottom: 7px;
+  }
+  .field label b {
+    font-size: 11.5px; font-weight: 600; color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  select {
+    width: 100%; padding: 9px 11px;
+    font-family: inherit; font-size: 12px; color: var(--txt);
+    background: rgba(0,0,0,.34); border: 1px solid var(--brd);
+    border-radius: 10px; outline: none; cursor: pointer;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--dim) 50%),
+                      linear-gradient(135deg, var(--dim) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 51%, calc(100% - 11px) 51%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+  select:focus { border-color: rgba(0,229,255,.5); }
+  select option { background: #121622; color: var(--txt); }
+
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; border-radius: 4px;
+    background: rgba(255,255,255,.12); outline: none; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); border: 2px solid #06131a;
+    box-shadow: 0 0 9px rgba(0,229,255,.85);
+    transition: transform .12s ease;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.22); }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px; height: 12px; border-radius: 50%; border: 2px solid #06131a;
+    background: var(--accent); box-shadow: 0 0 9px rgba(0,229,255,.85); cursor: pointer;
+  }
+
+  .row { display: flex; gap: 7px; }
+
+  input[type="text"] {
+    flex: 1; min-width: 0; padding: 9px 11px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px; letter-spacing: .03em; color: var(--txt);
+    background: rgba(0,0,0,.34); border: 1px solid var(--brd);
+    border-radius: 10px; outline: none;
+    transition: border-color .18s, box-shadow .18s;
+  }
+  input[type="text"]:focus {
+    border-color: rgba(0,229,255,.5); box-shadow: 0 0 0 3px rgba(0,229,255,.09);
+  }
+
+  /* ── Buttons ────────────────────────────────────────────────────────── */
+  .icon-btn {
+    width: 36px; flex: 0 0 36px;
+    background: var(--glass-2); border: 1px solid var(--brd);
+    border-radius: 10px; color: var(--dim);
+    font-size: 14px; cursor: pointer; transition: all .18s ease;
+  }
+  .icon-btn:hover { color: var(--accent); border-color: rgba(0,229,255,.42); }
+  #b-dice:hover { transform: rotate(90deg); }
+
+  .btn {
+    width: 100%; padding: 10px;
+    font-family: inherit; font-size: 10.5px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--txt); cursor: pointer;
+    background: var(--glass-2); border: 1px solid var(--brd);
+    border-radius: 10px; transition: all .16s ease;
+  }
+  .btn:hover { background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.22); }
+  .btn:active { transform: scale(.985); }
+
+  #generate {
+    width: 100%; margin-top: 4px; padding: 13px;
+    font-family: inherit; font-size: 11.5px; font-weight: 700;
+    letter-spacing: .13em; text-transform: uppercase;
+    color: #04222b; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent) 0%, #17b8ff 55%, #7a5cff 100%);
+    border: none; border-radius: 12px;
+    box-shadow: 0 6px 20px rgba(0,190,255,.3);
+    transition: transform .14s, box-shadow .18s, filter .18s;
+  }
+  #generate:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,190,255,.48); filter: brightness(1.1); }
+  #generate:active { transform: translateY(0) scale(.985); }
+  #generate:disabled { opacity: .5; cursor: progress; transform: none; }
+
+  /* ── Stats ──────────────────────────────────────────────────────────── */
+  #stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 14px; }
+  .stat {
+    text-align: center; padding: 8px 4px;
+    background: rgba(0,0,0,.24); border: 1px solid var(--brd); border-radius: 9px;
+  }
+  .stat .v { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .stat .k { font-size: 8px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin-top: 3px; }
+
+  /* ── Saved seeds ────────────────────────────────────────────────────── */
+  #seedlist { max-height: 148px; overflow-y: auto; margin-bottom: 9px; }
+  #seedlist::-webkit-scrollbar { width: 4px; }
+  #seedlist::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 3px; }
+
+  .seed-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 9px; margin-bottom: 5px;
+    background: rgba(0,0,0,.26); border: 1px solid var(--brd);
+    border-radius: 9px; cursor: pointer; transition: all .15s ease;
+  }
+  .seed-item:hover { background: rgba(0,229,255,.09); border-color: rgba(0,229,255,.34); }
+  .seed-item .tag {
+    flex: 0 0 auto; padding: 2px 6px; border-radius: 5px;
+    font-size: 8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  }
+  .tag.bsp  { background: rgba(0,229,255,.16);  color: #6ceaff; }
+  .tag.cave { background: rgba(122,92,255,.20); color: #b0a0ff; }
+  .tag.walk { background: rgba(255,179,71,.16); color: #ffcb85; }
+  .seed-item .nm {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px;
+  }
+  .seed-item .sz { flex: 0 0 auto; font-size: 9px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .seed-item .del {
+    flex: 0 0 auto; width: 15px; height: 15px; line-height: 13px; text-align: center;
+    border-radius: 4px; font-size: 11px; color: var(--dim);
+    background: rgba(255,255,255,.06); transition: all .15s;
+  }
+  .seed-item .del:hover { background: rgba(255,45,149,.28); color: #fff; }
+
+  .empty-note {
+    padding: 12px 4px; text-align: center; font-size: 10px;
+    color: var(--dim); letter-spacing: .05em; line-height: 1.7;
+  }
+
+  /* ── Legend + hints ─────────────────────────────────────────────────── */
+  #legend {
+    position: fixed; bottom: 20px; left: 340px; z-index: 10;
+    display: flex; gap: 15px; padding: 10px 15px;
+    background: var(--glass); border: 1px solid var(--brd);
+    border-radius: 12px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--dim); user-select: none;
+  }
+  .lg { display: flex; align-items: center; gap: 6px; }
+  .sw { width: 8px; height: 8px; border-radius: 2px; }
+
+  #hint {
+    position: fixed; bottom: 20px; right: 22px; z-index: 10;
+    font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--dim); text-align: right; line-height: 2; user-select: none; pointer-events: none;
+  }
+  #hint kbd {
+    font-family: inherit; color: var(--txt); background: rgba(255,255,255,.08);
+    border: 1px solid var(--brd); border-radius: 5px; padding: 1px 5px; font-size: 9px;
+  }
+
+  /* ── Toast ──────────────────────────────────────────────────────────── */
+  #toast {
+    position: fixed; top: 22px; left: 50%; transform: translate(-50%, -16px); z-index: 40;
+    padding: 10px 18px; border-radius: 11px;
+    background: var(--glass); border: 1px solid rgba(0,229,255,.4);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--txt);
+    opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  /* ── Boot overlay ───────────────────────────────────────────────────── */
+  #boot {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 13px; background: var(--bg-0); transition: opacity .6s ease;
+  }
+  #boot.hidden { opacity: 0; pointer-events: none; }
+  #boot .ring {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.12); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  #boot p { font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--dim); }
+  #boot .err {
+    color: var(--exit); letter-spacing: .04em; text-transform: none;
+    max-width: 440px; text-align: center; line-height: 1.7;
+  }
+
+  @media (max-width: 780px) {
+    #panel { width: calc(100vw - 24px); top: 12px; left: 12px; }
+    #legend, #hint { display: none; }
+  }
+</style>
+</head>
+
+<body>
+  <div id="app"></div>
+  <div id="vignette"></div>
+
+  <!-- ─── CONTROL PANEL ───────────────────────────────────────────────── -->
+  <div id="panel">
+    <div class="brand">
+      <div class="dot"></div>
+      <h1>Dungeon<span>Forge</span></h1>
+    </div>
+    <div class="tagline">Map Ideation Tool</div>
+
+    <!-- Generation -->
+    <div class="sect">Generation</div>
+
+    <div class="field">
+      <label>Algorithm</label>
+      <select id="s-algo">
+        <option value="bsp">BSP — Rooms &amp; Corridors</option>
+        <option value="cave">Cellular Automata — Caves</option>
+        <option value="walk">Drunkard's Walk — Tunnels</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Grid Size <b id="v-size">48</b></label>
+      <input type="range" id="s-size" min="24" max="90" step="2" value="48" />
+    </div>
+
+    <div class="field">
+      <label><span id="l-param">Room Count</span> <b id="v-param">9</b></label>
+      <input type="range" id="s-param" min="3" max="24" step="1" value="9" />
+    </div>
+
+    <div class="field">
+      <label>Build Speed <b id="v-speed">1.0×</b></label>
+      <input type="range" id="s-speed" min="0.3" max="3" step="0.1" value="1" />
+    </div>
+
+    <div class="field">
+      <label>Seed</label>
+      <div class="row">
+        <input type="text" id="i-seed" value="ideate-001" spellcheck="false" />
+        <button class="icon-btn" id="b-dice" title="Random seed">⟳</button>
+      </div>
+    </div>
+
+    <button id="generate">Generate Layout</button>
+
+    <div id="stats">
+      <div class="stat"><div class="v" id="st-rooms">0</div><div class="k">Rooms</div></div>
+      <div class="stat"><div class="v" id="st-blocks">0</div><div class="k">Blocks</div></div>
+      <div class="stat"><div class="v" id="st-fps">60</div><div class="k">FPS</div></div>
+    </div>
+
+    <!-- Bookmarks -->
+    <div class="sect">Saved Seeds</div>
+    <div id="seedlist"></div>
+    <button class="btn" id="b-save">★ Save Current Seed</button>
+
+    <!-- Export -->
+    <div class="sect">Export</div>
+    <div class="row" style="margin-bottom:7px">
+      <button class="btn" id="b-json">↓ JSON</button>
+      <button class="btn" id="b-png">↓ PNG</button>
+    </div>
+    <div class="empty-note" style="padding:2px 0 0; text-align:left; letter-spacing:.02em">
+      JSON feeds <code>unity/DungeonImporter.cs</code>
+    </div>
+  </div>
+
+  <div id="legend">
+    <div class="lg"><div class="sw" style="background:#3a4159"></div>Floor</div>
+    <div class="lg"><div class="sw" style="background:#6a7396"></div>Wall</div>
+    <div class="lg"><div class="sw" style="background:#00e5ff;box-shadow:0 0 8px #00e5ff"></div>Entry</div>
+    <div class="lg"><div class="sw" style="background:#ff2d95;box-shadow:0 0 8px #ff2d95"></div>Exit</div>
+    <div class="lg"><div class="sw" style="background:#ffb347;box-shadow:0 0 8px #ffb347"></div>Prop</div>
+  </div>
+
+  <div id="hint">
+    <div><kbd>Drag</kbd> Orbit <kbd>Scroll</kbd> Zoom <kbd>Right-drag</kbd> Pan</div>
+    <div><kbd>G</kbd> Generate <kbd>S</kbd> Save seed <kbd>E</kbd> Export <kbd>R</kbd> Reset cam</div>
+  </div>
+
+  <div id="toast"></div>
+
+  <div id="boot">
+    <div class="ring"></div>
+    <p id="boot-msg">Loading Three.js…</p>
+  </div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Three.js via CDN import-map — ES modules, no build step, no local server
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="importmap">
+{
+  "imports": {
+    "three":         "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE        from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 0 — CELL TYPES & CONFIG
+   ───────────────────────────────────────────────────────────────────────
+   The grid is a flat Uint8Array of these values. This enum is the contract
+   shared with the Unity importer — keep the numbers in sync with
+   DungeonImporter.cs if you ever change them.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const CELL = {
+  EMPTY : 0,   // solid rock, nothing rendered / spawned
+  FLOOR : 1,   // walkable
+  WALL  : 2,   // stone shell hugging any floor tile
+  ENTRY : 3,   // player spawn
+  EXIT  : 4,   // level goal
+  PROP  : 5    // decoration / loot marker (sits on a floor tile)
+};
+
+// Index = cell value. Exported in the JSON so the Unity side is self-describing.
+const CELL_NAMES = ['empty', 'floor', 'wall', 'entry', 'exit', 'prop'];
+
+const CFG = {
+  cellSize    : 1,      // world units per grid cell
+  floorH      : 0.30,   // floor slab thickness
+  wallH       : 1.55,   // wall block height — thick, chunky stone
+  padH        : 0.16,   // entry / exit pad height
+  propH       : 0.46,   // prop cube size
+  minLeaf     : 8,      // BSP: leaves smaller than this are never split
+  roomPad     : 1,      // BSP: min inset between leaf border and its room
+  caSteps     : 5,      // cellular automata smoothing passes
+  dropHeight  : 17,     // spawn height above the resting position
+  blockDur    : 620,    // ms for one block to finish drop + pop
+  staggerRing : 24,     // ms added per ring of distance from the entry
+  staggerJit  : 95      // ms of random jitter — softens the wave edge
+};
+
+/* Per-algorithm config for the single adaptive "param" slider. */
+const ALGOS = {
+  bsp:  { tag: 'bsp',  label: 'Room Count',  min: 3,  max: 24, step: 1, def: 9,  suffix: ''  },
+  cave: { tag: 'cave', label: 'Wall Density', min: 38, max: 52, step: 1, def: 45, suffix: '%' },
+  walk: { tag: 'walk', label: 'Carve Amount', min: 10, max: 55, step: 1, def: 28, suffix: '%' }
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 1 — SEEDED RNG  (mulberry32 + FNV-1a string hash)
+   Same seed string ⇒ byte-identical layout, every single time.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function hashSeed(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function makeRNG(seedStr) {
+  const rand = mulberry32(hashSeed(seedStr));
+  return {
+    next  : rand,
+    int   : (a, b) => a + Math.floor(rand() * (b - a + 1)),   // inclusive
+    pick  : arr    => arr[Math.floor(rand() * arr.length)],
+    chance: p      => rand() < p
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 2A — ALGORITHM 1: BSP ROOMS + CORRIDORS
+   ───────────────────────────────────────────────────────────────────────
+   Recursively cut the map in two, carve a room in every leaf, then unwind
+   the tree connecting sibling subtrees with L-corridors. Because the tree
+   is connected by construction, every room is reachable — no repair pass.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+class Leaf {
+  constructor(x, y, w, h) {
+    this.x = x; this.y = y; this.w = w; this.h = h;
+    this.left = null; this.right = null; this.room = null;
+    this.exhausted = false;      // proven too small to split
+  }
+
+  /** Split into two children. Cuts the LONGER axis when lopsided → squarer rooms. */
+  split(rng, minLeaf) {
+    if (this.left || this.right) return false;
+
+    let horizontal = rng.chance(0.5);
+    if      (this.w / this.h >= 1.25) horizontal = false;   // wide → cut vertically
+    else if (this.h / this.w >= 1.25) horizontal = true;    // tall → cut horizontally
+
+    const max = (horizontal ? this.h : this.w) - minLeaf;
+    if (max <= minLeaf) return false;
+
+    const cut = rng.int(minLeaf, max);
+    if (horizontal) {
+      this.left  = new Leaf(this.x, this.y,       this.w, cut);
+      this.right = new Leaf(this.x, this.y + cut, this.w, this.h - cut);
+    } else {
+      this.left  = new Leaf(this.x,       this.y, cut,          this.h);
+      this.right = new Leaf(this.x + cut, this.y, this.w - cut, this.h);
+    }
+    return true;
+  }
+
+  /** Find any room in this subtree — used to pick corridor endpoints. */
+  pickRoom(rng) {
+    if (this.room) return this.room;
+    const l = this.left  ? this.left.pickRoom(rng)  : null;
+    const r = this.right ? this.right.pickRoom(rng) : null;
+    if (l && r) return rng.chance(0.5) ? l : r;
+    return l || r;
+  }
+}
+
+function genBSP(size, rng, targetRooms) {
+  const grid = new Uint8Array(size * size);          // all EMPTY
+  const idx  = (x, y) => y * size + x;
+
+  /* ── Partition: always split the largest splittable leaf ─────────── */
+  const root   = new Leaf(1, 1, size - 2, size - 2); // 1-cell border margin
+  const leaves = [root];
+
+  while (leaves.length < targetRooms) {
+    let bi = -1, bestArea = -1;
+    for (let i = 0; i < leaves.length; i++) {
+      const L = leaves[i];
+      if (L.exhausted) continue;
+      const area = L.w * L.h;
+      if (area > bestArea) { bestArea = area; bi = i; }
+    }
+    if (bi === -1) break;                            // nothing left to cut
+
+    const L = leaves[bi];
+    if (L.split(rng, CFG.minLeaf)) leaves.splice(bi, 1, L.left, L.right);
+    else                           L.exhausted = true;
+  }
+
+  /* ── Carve one room per leaf ─────────────────────────────────────── */
+  const rooms = [];
+  for (const L of leaves) {
+    const maxW = L.w - CFG.roomPad * 2;
+    const maxH = L.h - CFG.roomPad * 2;
+    if (maxW < 3 || maxH < 3) continue;
+
+    const rw = rng.int(Math.max(3, Math.floor(maxW * 0.58)), maxW);
+    const rh = rng.int(Math.max(3, Math.floor(maxH * 0.58)), maxH);
+    const rx = L.x + rng.int(CFG.roomPad, L.w - rw - CFG.roomPad);
+    const ry = L.y + rng.int(CFG.roomPad, L.h - rh - CFG.roomPad);
+
+    const room = { x: rx, y: ry, w: rw, h: rh, type: 'room',
+                   cx: Math.floor(rx + rw / 2), cy: Math.floor(ry + rh / 2) };
+    L.room = room;
+    rooms.push(room);
+
+    for (let y = ry; y < ry + rh; y++)
+      for (let x = rx; x < rx + rw; x++) grid[idx(x, y)] = CELL.FLOOR;
+  }
+
+  /* ── Corridors: join sibling subtrees, bottom-up ─────────────────── */
+  const carveH = (x1, x2, y) => {
+    for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++)
+      if (grid[idx(x, y)] === CELL.EMPTY) grid[idx(x, y)] = CELL.FLOOR;
+  };
+  const carveV = (y1, y2, x) => {
+    for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++)
+      if (grid[idx(x, y)] === CELL.EMPTY) grid[idx(x, y)] = CELL.FLOOR;
+  };
+
+  (function connect(node) {
+    if (!node || !node.left || !node.right) return;
+    connect(node.left);
+    connect(node.right);
+    const a = node.left.pickRoom(rng);
+    const b = node.right.pickRoom(rng);
+    if (!a || !b) return;
+    // L-shaped: horizontal-then-vertical, or vertical-then-horizontal.
+    if (rng.chance(0.5)) { carveH(a.cx, b.cx, a.cy); carveV(a.cy, b.cy, b.cx); }
+    else                 { carveV(a.cy, b.cy, a.cx); carveH(a.cx, b.cx, b.cy); }
+  })(root);
+
+  return { grid, rooms };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 2B — ALGORITHM 2: CELLULAR AUTOMATA (organic caves)
+   ───────────────────────────────────────────────────────────────────────
+   Seed the grid with noise, then repeatedly apply the classic 5-of-8 rule:
+   a cell becomes solid if 5+ of its 8 neighbours are solid. A handful of
+   passes turns static into believable cave systems.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function genCave(size, rng, fillPct) {
+  const idx = (x, y) => y * size + x;
+  let grid  = new Uint8Array(size * size);
+
+  // 1 · Random fill. The outer 2 cells stay solid so caves never touch the edge.
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const border = x < 2 || y < 2 || x >= size - 2 || y >= size - 2;
+      grid[idx(x, y)] = (border || rng.next() * 100 < fillPct) ? CELL.EMPTY : CELL.FLOOR;
+    }
+  }
+
+  // 2 · Smoothing passes. Out-of-bounds counts as solid, which keeps edges closed.
+  for (let step = 0; step < CFG.caSteps; step++) {
+    const next = new Uint8Array(size * size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        let solid = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= size || ny >= size) { solid++; continue; }
+            if (grid[idx(nx, ny)] === CELL.EMPTY) solid++;
+          }
+        }
+        next[idx(x, y)] = solid >= 5 ? CELL.EMPTY : CELL.FLOOR;
+      }
+    }
+    grid = next;
+  }
+
+  // Isolated pockets are pruned by keepLargestRegion() in the shared post-pass.
+  return { grid, rooms: null };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 2C — ALGORITHM 3: DRUNKARD'S WALK (winding tunnels)
+   ───────────────────────────────────────────────────────────────────────
+   A walker carves floor as it stumbles around. Keeping its heading most of
+   the time (momentum) is what produces long tunnels instead of a blob.
+   It occasionally teleports back onto already-carved ground to branch, and
+   occasionally widens into a small chamber.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function genWalk(size, rng, carvePct) {
+  const idx  = (x, y) => y * size + x;
+  const grid = new Uint8Array(size * size);
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+  const margin = 2;
+  const target = Math.floor(size * size * carvePct / 100);
+  const carved = [];                       // every carved index, for teleporting
+
+  let x = size >> 1, y = size >> 1;
+  grid[idx(x, y)] = CELL.FLOOR;
+  carved.push(idx(x, y));
+
+  let dir = rng.pick(DIRS);
+  let guard = target * 60;                 // hard cap so a bad seed can't hang
+
+  // Aim for ~9 chambers per map, but never closer together than 18 carved cells.
+  const chamberEvery = Math.max(18, Math.floor(target / 9));
+  let nextChamber = chamberEvery;
+
+  while (carved.length < target && guard-- > 0) {
+    // Momentum: only turn ~22% of steps → long, readable corridors.
+    if (rng.chance(0.22)) dir = rng.pick(DIRS);
+
+    const nx = x + dir[0], ny = y + dir[1];
+    if (nx < margin || ny < margin || nx >= size - margin || ny >= size - margin) {
+      dir = rng.pick(DIRS);                // bounced off the border, turn
+      continue;
+    }
+    x = nx; y = ny;
+
+    if (grid[idx(x, y)] !== CELL.FLOOR) {
+      grid[idx(x, y)] = CELL.FLOOR;
+      carved.push(idx(x, y));
+    }
+
+    // Blow out a chamber on a schedule rather than by chance, so every map gets
+    // ~9 of them no matter how small it is. Pure tunnels with nowhere to open up
+    // are miserable to design in — the walker needs rooms to connect.
+    if (carved.length >= nextChamber) {
+      nextChamber = carved.length + chamberEvery;
+      const r = rng.chance(0.3) ? 2 : 1;              // 5×5 or 3×3
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const cx = x + dx, cy = y + dy;
+          if (cx < margin || cy < margin || cx >= size - margin || cy >= size - margin) continue;
+          if (grid[idx(cx, cy)] !== CELL.FLOOR) {
+            grid[idx(cx, cy)] = CELL.FLOOR;
+            carved.push(idx(cx, cy));
+          }
+        }
+      }
+    }
+
+    // Occasionally jump back to existing ground → branches instead of one snake.
+    // Always lands on carved floor, so the network stays fully connected.
+    if (rng.chance(0.005)) {
+      const c = carved[rng.int(0, carved.length - 1)];
+      x = c % size; y = (c / size) | 0;
+      dir = rng.pick(DIRS);
+    }
+  }
+
+  return { grid, rooms: null };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 3 — SHARED POST-PROCESS
+   Runs identically for all three algorithms, so everything downstream
+   (rendering, stats, export) never needs to know which one produced the map.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** Flood-fill every floor region; keep only the biggest. Kills orphan pockets. */
+function keepLargestRegion(grid, size) {
+  const seen  = new Uint8Array(size * size);
+  const stack = [];
+  let best = null, bestSize = 0;
+
+  for (let i = 0; i < grid.length; i++) {
+    if (grid[i] !== CELL.FLOOR || seen[i]) continue;
+
+    const region = [];
+    stack.length = 0; stack.push(i); seen[i] = 1;
+
+    while (stack.length) {
+      const c  = stack.pop();
+      const cx = c % size, cy = (c / size) | 0;
+      region.push(c);
+      if (cx > 0        && grid[c - 1]    === CELL.FLOOR && !seen[c - 1])    { seen[c - 1]    = 1; stack.push(c - 1); }
+      if (cx < size - 1 && grid[c + 1]    === CELL.FLOOR && !seen[c + 1])    { seen[c + 1]    = 1; stack.push(c + 1); }
+      if (cy > 0        && grid[c - size] === CELL.FLOOR && !seen[c - size]) { seen[c - size] = 1; stack.push(c - size); }
+      if (cy < size - 1 && grid[c + size] === CELL.FLOOR && !seen[c + size]) { seen[c + size] = 1; stack.push(c + size); }
+    }
+    if (region.length > bestSize) { bestSize = region.length; best = region; }
+  }
+
+  if (!best) return 0;
+  const keep = new Uint8Array(size * size);
+  for (const i of best) keep[i] = 1;
+  for (let i = 0; i < grid.length; i++) if (grid[i] === CELL.FLOOR && !keep[i]) grid[i] = CELL.EMPTY;
+  return bestSize;
+}
+
+/** Any EMPTY cell 8-adjacent to a FLOOR becomes a WALL — clean stone shells. */
+function deriveWalls(grid, size) {
+  const idx = (x, y) => y * size + x;
+  const hits = [];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (grid[idx(x, y)] !== CELL.EMPTY) continue;
+      let touching = false;
+      for (let dy = -1; dy <= 1 && !touching; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+          if (grid[idx(nx, ny)] === CELL.FLOOR) { touching = true; break; }
+        }
+      }
+      if (touching) hits.push(idx(x, y));
+    }
+  }
+  for (const i of hits) grid[i] = CELL.WALL;
+}
+
+/** BFS over walkable cells; returns the farthest cell and the distance field. */
+function bfsFarthest(grid, size, start) {
+  const dist = new Int32Array(size * size).fill(-1);
+  const queue = new Int32Array(size * size);
+  let head = 0, tail = 0, far = start;
+
+  dist[start] = 0; queue[tail++] = start;
+
+  while (head < tail) {
+    const c  = queue[head++];
+    const cx = c % size, cy = (c / size) | 0;
+    if (dist[c] > dist[far]) far = c;
+
+    const step = (n) => {
+      if (grid[n] === CELL.FLOOR && dist[n] === -1) { dist[n] = dist[c] + 1; queue[tail++] = n; }
+    };
+    if (cx > 0)        step(c - 1);
+    if (cx < size - 1) step(c + 1);
+    if (cy > 0)        step(c - size);
+    if (cy < size - 1) step(c + size);
+  }
+  return { far, dist };
+}
+
+/**
+ * Entry / exit = the two walkable cells farthest apart on the traversal graph.
+ * Classic double-BFS (graph diameter): BFS from anywhere → farthest cell A,
+ * BFS from A → farthest cell B. A and B are the endpoints of a longest path,
+ * which is exactly what a designer wants for "start here, finish there".
+ */
+function placeEntryExit(grid, size) {
+  let firstFloor = -1;
+  for (let i = 0; i < grid.length; i++) if (grid[i] === CELL.FLOOR) { firstFloor = i; break; }
+  if (firstFloor === -1) return null;
+
+  const a = bfsFarthest(grid, size, firstFloor).far;
+  const b = bfsFarthest(grid, size, a).far;
+
+  return {
+    entry: { x: a % size, y: (a / size) | 0 },
+    exit : { x: b % size, y: (b / size) | 0 }
+  };
+}
+
+/**
+ * Chamber detection for CA / Walk maps, which have no explicit room list.
+ * Erode to "core" cells (7+ floor neighbours), flood-fill the cores, and take
+ * each blob's bounding box. Narrow corridors erode away, so what survives is
+ * the open areas — which is what a level designer reads as a room.
+ *
+ * A cell only reaches 7 floor neighbours inside genuinely open space (a 2-wide
+ * corridor tops out at 5), so even a single core cell is a real chamber and
+ * there's no noise to filter out. Erosion shrinks each blob by one ring, so the
+ * bounding box is grown back by 1 to recover the true chamber extent — that's
+ * what turns a lone core cell back into the 3×3 room it came from.
+ */
+function detectChambers(grid, size) {
+  const idx  = (x, y) => y * size + x;
+  const core = new Uint8Array(size * size);
+
+  for (let y = 1; y < size - 1; y++) {
+    for (let x = 1; x < size - 1; x++) {
+      if (grid[idx(x, y)] !== CELL.FLOOR) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          if (grid[idx(x + dx, y + dy)] === CELL.FLOOR) n++;
+        }
+      if (n >= 7) core[idx(x, y)] = 1;
+    }
+  }
+
+  const seen = new Uint8Array(size * size);
+  const stack = [], rooms = [];
+
+  for (let i = 0; i < core.length; i++) {
+    if (!core[i] || seen[i]) continue;
+
+    let minx = 1e9, miny = 1e9, maxx = -1, maxy = -1, area = 0;
+    stack.length = 0; stack.push(i); seen[i] = 1;
+
+    while (stack.length) {
+      const c  = stack.pop();
+      const cx = c % size, cy = (c / size) | 0;
+      area++;
+      if (cx < minx) minx = cx;  if (cx > maxx) maxx = cx;
+      if (cy < miny) miny = cy;  if (cy > maxy) maxy = cy;
+
+      if (cx > 0        && core[c - 1]    && !seen[c - 1])    { seen[c - 1]    = 1; stack.push(c - 1); }
+      if (cx < size - 1 && core[c + 1]    && !seen[c + 1])    { seen[c + 1]    = 1; stack.push(c + 1); }
+      if (cy > 0        && core[c - size] && !seen[c - size]) { seen[c - size] = 1; stack.push(c - size); }
+      if (cy < size - 1 && core[c + size] && !seen[c + size]) { seen[c + size] = 1; stack.push(c + size); }
+    }
+
+    if (area >= 1) {
+      // Grow back the ring erosion removed, clamped to the grid.
+      const x0 = Math.max(0, minx - 1),        y0 = Math.max(0, miny - 1);
+      const x1 = Math.min(size - 1, maxx + 1), y1 = Math.min(size - 1, maxy + 1);
+      rooms.push({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, type: 'chamber',
+                   cx: (x0 + x1) >> 1, cy: (y0 + y1) >> 1 });
+    }
+  }
+  return rooms;
+}
+
+/** Scatter props on interior floor tiles inside rooms — never on entry/exit. */
+function placeProps(grid, size, rooms, rng) {
+  const idx = (x, y) => y * size + x;
+  for (const r of rooms) {
+    if (r.type === 'entry' || r.type === 'exit') continue;
+    if (r.w < 3 || r.h < 3) continue;
+
+    const count = rng.int(0, 2);
+    for (let k = 0; k < count; k++) {
+      const px = rng.int(r.x + 1, r.x + r.w - 2);
+      const py = rng.int(r.y + 1, r.y + r.h - 2);
+      if (grid[idx(px, py)] === CELL.FLOOR) grid[idx(px, py)] = CELL.PROP;
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 4 — GENERATOR ENTRY POINT
+   Dispatches to an algorithm, runs the shared post-process, and returns the
+   single data object used by BOTH the 3D preview and the JSON export.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function generateLayout({ algorithm, size, param, seed }) {
+  const rng = makeRNG(seed);
+
+  // 1 · Algorithm produces raw FLOOR / EMPTY.
+  let out;
+  if      (algorithm === 'bsp')  out = genBSP(size, rng, param);
+  else if (algorithm === 'cave') out = genCave(size, rng, param);
+  else                           out = genWalk(size, rng, param);
+
+  const grid = out.grid;
+
+  // 2 · Prune disconnected pockets (no-op for BSP / Walk, essential for CA).
+  const floorCount = keepLargestRegion(grid, size);
+
+  // 3 · Entry / exit — computed on the raw floor graph, before walls exist.
+  const ends = floorCount > 0 ? placeEntryExit(grid, size) : null;
+
+  // 4 · Stone shell.
+  deriveWalls(grid, size);
+
+  // 5 · Rooms: exact rects from BSP, or detected chambers for the other two.
+  const rooms = out.rooms || detectChambers(grid, size);
+
+  // 6 · Tag which rooms hold the entry / exit, then stamp the markers.
+  let entry = { x: 0, y: 0 }, exitPt = { x: 0, y: 0 };
+  if (ends) {
+    entry = ends.entry; exitPt = ends.exit;
+    const inside = (r, p) => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
+    for (const r of rooms) {
+      if      (inside(r, entry))  r.type = 'entry';
+      else if (inside(r, exitPt)) r.type = 'exit';
+    }
+    grid[entry.y * size + entry.x]   = CELL.ENTRY;
+    grid[exitPt.y * size + exitPt.x] = CELL.EXIT;
+  }
+
+  // 7 · Props.
+  placeProps(grid, size, rooms, rng);
+
+  return { algorithm, seed, size, grid, rooms, entry, exit: exitPt, floorCount };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 5 — EASING (drives the build-in animation)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+
+/** Spring overshoot — the satisfying "pop" as a block lands. */
+const easeOutBack = t => {
+  const c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+};
+
+const clamp01 = t => (t < 0 ? 0 : t > 1 ? 1 : t);
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 6 — SCENE, CAMERA, LIGHTS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const container = document.getElementById('app');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled   = true;
+renderer.shadowMap.type      = THREE.PCFSoftShadowMap;
+renderer.toneMapping         = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace    = THREE.SRGBColorSpace;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07080d);
+scene.fog        = new THREE.Fog(0x07080d, 60, 180);
+
+/* ── Isometric orthographic camera ─────────────────────────────────────
+   Equal X/Z offset + raised Y = the classic 45°/35° game-map look. */
+const FRUSTUM = 34;
+const aspect  = () => window.innerWidth / window.innerHeight;
+const camera  = new THREE.OrthographicCamera(
+  -FRUSTUM * aspect(), FRUSTUM * aspect(), FRUSTUM, -FRUSTUM, 0.1, 700
+);
+const CAM_HOME = new THREE.Vector3(52, 48, 52);
+camera.position.copy(CAM_HOME);
+camera.lookAt(0, 0, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minZoom       = 0.3;
+controls.maxZoom       = 5;
+controls.maxPolarAngle = Math.PI * 0.49;      // never dip below the floor plane
+controls.target.set(0, 0, 0);
+
+/* ── Lighting: low ambient + strong key = deep, moody contrast ───────── */
+scene.add(new THREE.AmbientLight(0x2a3350, 0.5));
+scene.add(new THREE.HemisphereLight(0x4a6cff, 0x0a0c14, 0.42));
+
+const keyLight = new THREE.DirectionalLight(0xc3d6ff, 2.15);
+keyLight.position.set(40, 62, 28);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.camera.near = 1;
+keyLight.shadow.camera.far  = 260;
+keyLight.shadow.bias        = -0.0006;
+keyLight.shadow.normalBias  =  0.024;
+scene.add(keyLight, keyLight.target);
+
+// Cyan rim from the opposite side — defines the low-poly wall edges.
+const rimLight = new THREE.DirectionalLight(0x00c8ff, 0.62);
+rimLight.position.set(-36, 24, -32);
+scene.add(rimLight);
+
+// Neon point lights, repositioned onto the entry / exit each generation.
+const entryLight = new THREE.PointLight(0x00e5ff, 0, 24, 2);
+const exitLight  = new THREE.PointLight(0xff2d95, 0, 24, 2);
+scene.add(entryLight, exitLight);
+
+/* ── Ground + blueprint grid ───────────────────────────────────────── */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(600, 600),
+  new THREE.MeshStandardMaterial({ color: 0x0a0c14, roughness: 1, metalness: 0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.36;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const gridHelper = new THREE.GridHelper(320, 160, 0x1b2440, 0x121828);
+gridHelper.position.y = -0.35;
+gridHelper.material.transparent = true;
+gridHelper.material.opacity     = 0.32;
+scene.add(gridHelper);
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 7 — SHARED GEOMETRY & MATERIALS  (built once, reused forever)
+   ───────────────────────────────────────────────────────────────────────
+   One unit box shared by every pool; per-instance matrices supply the real
+   size. Accent types get their own material because in Three.js the
+   per-instance color multiplies DIFFUSE only — emissive would stay white,
+   so a shared accent material could never glow cyan AND magenta.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const BOX = new THREE.BoxGeometry(1, 1, 1);
+
+const MAT_FLOOR = new THREE.MeshStandardMaterial({
+  color: 0x39405a, roughness: 0.94, metalness: 0.05, flatShading: true
+});
+const MAT_WALL = new THREE.MeshStandardMaterial({
+  color: 0x5c658a, roughness: 0.8, metalness: 0.1, flatShading: true
+});
+const mkEmissive = hex => new THREE.MeshStandardMaterial({
+  color: hex, emissive: hex, emissiveIntensity: 1.1,
+  roughness: 0.35, metalness: 0.15, flatShading: true
+});
+const MAT_ENTRY = mkEmissive(0x00e5ff);
+const MAT_EXIT  = mkEmissive(0xff2d95);
+const MAT_PROP  = mkEmissive(0xffb347);
+
+/* Pool definitions — index here == the `pool` value in the animation arrays. */
+const POOL_DEFS = [
+  { key: 'floor', mat: MAT_FLOOR, cast: false, recv: true,  tint: true  },
+  { key: 'wall',  mat: MAT_WALL,  cast: true,  recv: true,  tint: true  },
+  { key: 'entry', mat: MAT_ENTRY, cast: false, recv: false, tint: false },
+  { key: 'exit',  mat: MAT_EXIT,  cast: false, recv: false, tint: false },
+  { key: 'prop',  mat: MAT_PROP,  cast: true,  recv: false, tint: false }
+];
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 8 — BUILDER: instanced meshes + drop-in animation
+   ───────────────────────────────────────────────────────────────────────
+   5 InstancedMesh pools ⇒ 5 draw calls no matter how many blocks.
+   Per-block animation state lives in flat typed arrays (cache friendly).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const dungeonGroup = new THREE.Group();
+scene.add(dungeonGroup);
+
+const anim = {
+  pools : [],
+  px: null, py: null, pz: null,        // resting world position
+  sx: null, sy: null, sz: null,        // resting scale
+  pool: null, slot: null,              // which pool / instance index
+  delay: null,                         // ms before this block starts moving
+  total: 0, startTime: 0, longest: 0,
+  running: false, speed: 1
+};
+
+const _m4 = new THREE.Matrix4();
+const _q  = new THREE.Quaternion();
+const _v  = new THREE.Vector3();
+const _s  = new THREE.Vector3();
+const _c  = new THREE.Color();
+
+function clearLayout() {
+  for (const p of anim.pools) { dungeonGroup.remove(p.mesh); p.mesh.dispose(); }
+  anim.pools = [];
+  anim.running = false;
+  entryLight.intensity = 0;
+  exitLight.intensity  = 0;
+}
+
+/**
+ * Turn a generated layout into animated instanced geometry.
+ * Each block's start delay comes from its Manhattan distance to the ENTRY, so
+ * the map visibly grows outward from the entrance like a wave.
+ */
+function buildLayout(data, speed) {
+  clearLayout();
+
+  const { grid, size, entry } = data;
+  const half = (size * CFG.cellSize) / 2;
+  const tintRng = makeRNG(data.seed + '::tint');   // deterministic stone variation
+
+  /* ── 8.1 · Bucket cells into the 5 pools ───────────────────────────
+     ENTRY / EXIT / PROP cells also get a floor tile underneath them. */
+  const buckets = [[], [], [], [], []];   // floor, wall, entry, exit, prop
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const c = grid[y * size + x];
+      if (c === CELL.EMPTY) continue;
+      if (c === CELL.WALL) { buckets[1].push({ x, y }); continue; }
+
+      buckets[0].push({ x, y });                                   // floor under everything
+      if      (c === CELL.ENTRY) buckets[2].push({ x, y });
+      else if (c === CELL.EXIT)  buckets[3].push({ x, y });
+      else if (c === CELL.PROP)  buckets[4].push({ x, y });
+    }
+  }
+
+  const total = buckets.reduce((n, b) => n + b.length, 0);
+
+  /* ── 8.2 · Allocate the flat animation arrays ──────────────────────── */
+  anim.px = new Float32Array(total); anim.py = new Float32Array(total); anim.pz = new Float32Array(total);
+  anim.sx = new Float32Array(total); anim.sy = new Float32Array(total); anim.sz = new Float32Array(total);
+  anim.pool  = new Uint8Array(total);
+  anim.slot  = new Uint32Array(total);
+  anim.delay = new Float32Array(total);
+  anim.total = total;
+  anim.speed = speed;
+
+  /* ── 8.3 · Create the pools ────────────────────────────────────────── */
+  anim.pools = POOL_DEFS.map((def, i) => {
+    const count = buckets[i].length;
+    const mesh  = new THREE.InstancedMesh(BOX, def.mat, Math.max(count, 1));
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.castShadow    = def.cast;
+    mesh.receiveShadow = def.recv;
+    mesh.frustumCulled = false;            // instances move during the build-in
+    mesh.count = count;
+    dungeonGroup.add(mesh);
+    return { mesh, count, def };
+  });
+
+  /* ── 8.4 · Fill the animation arrays ───────────────────────────────── */
+  let n = 0;
+
+  /** Distance-from-entry → staggered start time.
+   *  Jitter is cosmetic and deliberately unseeded — the LAYOUT stays fully
+   *  deterministic for a given seed; only the shimmer of the build differs. */
+  const delayFor = (x, y, extra = 0) =>
+    (( Math.abs(x - entry.x) + Math.abs(y - entry.y) ) * CFG.staggerRing
+      + Math.random() * CFG.staggerJit + extra) / speed;
+
+  const push = (poolIdx, slot, wx, wy, wz, sx, sy, sz, delay) => {
+    anim.px[n] = wx; anim.py[n] = wy; anim.pz[n] = wz;
+    anim.sx[n] = sx; anim.sy[n] = sy; anim.sz[n] = sz;
+    anim.pool[n] = poolIdx; anim.slot[n] = slot; anim.delay[n] = delay;
+    n++;
+  };
+
+  const wx = x => x * CFG.cellSize - half + 0.5;   // grid X → world X
+  const wz = y => y * CFG.cellSize - half + 0.5;   // grid Y → world Z
+
+  // Floors — land first. 0.94 width leaves grout lines → reads as tiled stone.
+  buckets[0].forEach((c, i) => {
+    push(0, i, wx(c.x), CFG.floorH / 2, wz(c.y),
+         CFG.cellSize * 0.94, CFG.floorH, CFG.cellSize * 0.94,
+         delayFor(c.x, c.y, 0));
+  });
+
+  // Walls — full-width and tall, so they read as thick, solid stone.
+  buckets[1].forEach((c, i) => {
+    push(1, i, wx(c.x), CFG.wallH / 2, wz(c.y),
+         CFG.cellSize, CFG.wallH, CFG.cellSize,
+         delayFor(c.x, c.y, 130));
+  });
+
+  // Entry / exit pads — flat glowing plates on top of their floor tile.
+  [2, 3].forEach(pi => buckets[pi].forEach((c, i) => {
+    push(pi, i, wx(c.x), CFG.floorH + CFG.padH / 2, wz(c.y),
+         0.84, CFG.padH, 0.84,
+         delayFor(c.x, c.y, 340));
+  }));
+
+  // Props — small glowing cubes, land last.
+  buckets[4].forEach((c, i) => {
+    push(4, i, wx(c.x), CFG.floorH + CFG.propH / 2, wz(c.y),
+         CFG.propH, CFG.propH, CFG.propH,
+         delayFor(c.x, c.y, 380));
+  });
+
+  /* ── 8.5 · Per-instance stone tint on floors and walls ─────────────── */
+  anim.pools.forEach((p, i) => {
+    if (!p.def.tint || p.count === 0) return;
+    for (let k = 0; k < p.count; k++) {
+      const v = 0.82 + tintRng.next() * 0.34;     // multiplies the material diffuse
+      p.mesh.setColorAt(k, _c.setRGB(v, v, v));
+    }
+    if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
+  });
+
+  /* ── 8.6 · Kick off the animation ──────────────────────────────────── */
+  let longest = 0;
+  for (let i = 0; i < total; i++) if (anim.delay[i] > longest) longest = anim.delay[i];
+  anim.longest   = longest + CFG.blockDur / speed;
+  anim.startTime = performance.now();
+  anim.running   = true;
+
+  // Frame 0: everything is up in the air at zero scale, so nothing pops in raw.
+  _q.identity();
+  for (let i = 0; i < total; i++) {
+    _m4.compose(_v.set(anim.px[i], anim.py[i] + CFG.dropHeight, anim.pz[i]), _q, _s.set(0, 0, 0));
+    anim.pools[anim.pool[i]].mesh.setMatrixAt(anim.slot[i], _m4);
+  }
+  for (const p of anim.pools) p.mesh.instanceMatrix.needsUpdate = true;
+
+  /* ── 8.7 · Reframe lights, shadows and camera for this map size ────── */
+  entryLight.position.set(wx(entry.x), 2.4, wz(entry.y));
+  exitLight .position.set(wx(data.exit.x), 2.4, wz(data.exit.y));
+
+  const extent = size * CFG.cellSize * 0.72;      // tight shadow frustum = crisp shadows
+  keyLight.shadow.camera.left   = -extent;
+  keyLight.shadow.camera.right  =  extent;
+  keyLight.shadow.camera.top    =  extent;
+  keyLight.shadow.camera.bottom = -extent;
+  keyLight.shadow.camera.updateProjectionMatrix();
+
+  controls.target.set(0, 0, 0);
+  camera.zoom = THREE.MathUtils.clamp(34 / (size * 0.52), 0.3, 5);
+  camera.updateProjectionMatrix();
+
+  scene.fog.near = size * 1.35;
+  scene.fog.far  = size * 4.4;
+
+  return { total };
+}
+
+/**
+ * Per-frame update. Each block drops from `dropHeight` (easeOutCubic) while
+ * scaling up from zero (easeOutBack overshoot). Once every block has settled
+ * we stop touching the instance buffers entirely — an idle map is free.
+ */
+function updateBuild(now) {
+  if (!anim.running) return;
+
+  const elapsed  = now - anim.startTime;
+  const duration = CFG.blockDur / anim.speed;
+  let   settled  = 0;
+
+  _q.identity();
+
+  for (let i = 0; i < anim.total; i++) {
+    const t = clamp01((elapsed - anim.delay[i]) / duration);
+    if (t >= 1) settled++;
+
+    if (t <= 0) {
+      // Not started — parked invisibly above the board.
+      _m4.compose(_v.set(anim.px[i], anim.py[i] + CFG.dropHeight, anim.pz[i]), _q, _s.set(0, 0, 0));
+    } else {
+      const pop = Math.max(0, easeOutBack(t));
+      const y   = anim.py[i] + CFG.dropHeight * (1 - easeOutCubic(t));
+      _m4.compose(
+        _v.set(anim.px[i], y, anim.pz[i]), _q,
+        _s.set(anim.sx[i] * pop, anim.sy[i] * pop, anim.sz[i] * pop)
+      );
+    }
+    anim.pools[anim.pool[i]].mesh.setMatrixAt(anim.slot[i], _m4);
+  }
+
+  for (const p of anim.pools) p.mesh.instanceMatrix.needsUpdate = true;
+
+  // Neon ramps up as the build completes.
+  const prog = clamp01(elapsed / anim.longest);
+  entryLight.intensity = prog * 15;
+  exitLight.intensity  = prog * 15;
+
+  if (settled >= anim.total) anim.running = false;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 9 — EXPORT  (the Unity bridge + minimap PNG)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** Trigger a browser download from a Blob. Works from file:// — no server. */
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+/** Filesystem-safe slug for filenames. */
+const slug = s => s.replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'layout';
+
+/**
+ * Build the export payload.
+ *
+ * The grid ships TWICE on purpose:
+ *   • `cells`     — 2D rows. Human-readable, the canonical form for any tool.
+ *   • `cellsFlat` — the same grid row-major.
+ * Unity's JsonUtility cannot represent nested arrays, so DungeonImporter.cs
+ * reads `cellsFlat` + width/height and rebuilds the 2D grid itself.
+ *
+ * Coordinates: grid x → Unity X, grid y → Unity Z, Y is up.
+ */
+function buildExportPayload(data) {
+  const { size, grid } = data;
+
+  const cells = [];
+  for (let y = 0; y < size; y++) {
+    const row = new Array(size);
+    for (let x = 0; x < size; x++) row[x] = grid[y * size + x];
+    cells.push(row);
+  }
+
+  return {
+    tool      : 'DungeonForge Map Ideation Tool',
+    version   : 1,
+    algorithm : data.algorithm,
+    seed      : data.seed,
+    width     : size,
+    height    : size,
+    cellTypes : CELL_NAMES,                       // index == cell value
+    cells     : cells,                            // 2D — for humans / other tools
+    cellsFlat : Array.from(grid),                 // row-major — for Unity
+    rooms     : data.rooms.map(r => ({ x: r.x, y: r.y, w: r.w, h: r.h, type: r.type })),
+    entry     : { x: data.entry.x, y: data.entry.y },
+    exit      : { x: data.exit.x,  y: data.exit.y  }
+  };
+}
+
+function exportJSON() {
+  if (!current) return;
+  const payload = buildExportPayload(current);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, `dungeon_${current.algorithm}_${slug(current.seed)}_${current.size}.json`);
+  toast('JSON exported → drop into Unity');
+}
+
+/** Top-down minimap PNG with a caption strip — good for mood boards / docs. */
+const PNG_COLORS = ['#0b0d14', '#3a4159', '#6a7396', '#00e5ff', '#ff2d95', '#ffb347'];
+
+function exportPNG() {
+  if (!current) return;
+  const { size, grid } = current;
+
+  const cell = Math.max(4, Math.min(14, Math.floor(760 / size)));
+  const pad  = 18;
+  const head = 40;
+
+  const cv  = document.createElement('canvas');
+  cv.width  = size * cell + pad * 2;
+  cv.height = size * cell + pad * 2 + head;
+  const ctx = cv.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#07080d';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+
+  // Cells
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const v = grid[y * size + x];
+      if (v === CELL.EMPTY) continue;
+      ctx.fillStyle = PNG_COLORS[v] || '#ffffff';
+      ctx.fillRect(pad + x * cell, pad + head + y * cell, cell, cell);
+    }
+  }
+
+  // Glow rings around entry / exit so they're findable at a glance.
+  const ring = (p, color) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.strokeRect(pad + p.x * cell - cell, pad + head + p.y * cell - cell, cell * 3, cell * 3);
+  };
+  ring(current.entry, '#00e5ff');
+  ring(current.exit,  '#ff2d95');
+
+  // Caption
+  ctx.fillStyle = '#e6e9f2';
+  ctx.font = 'bold 15px Consolas, monospace';
+  ctx.fillText(`${current.algorithm.toUpperCase()}  ·  "${current.seed}"`, pad, 25);
+  ctx.fillStyle = '#8a92ad';
+  ctx.font = '12px Consolas, monospace';
+  const meta = `${size}×${size}  ·  ${current.rooms.length} rooms`;
+  ctx.fillText(meta, cv.width - pad - ctx.measureText(meta).width, 25);
+
+  cv.toBlob(blob => {
+    downloadBlob(blob, `minimap_${current.algorithm}_${slug(current.seed)}_${size}.png`);
+    toast('Minimap PNG exported');
+  }, 'image/png');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 10 — UI STATE & WIRING
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const el = id => document.getElementById(id);
+
+const ui = {
+  algo   : el('s-algo'),
+  size   : el('s-size'),   vSize  : el('v-size'),
+  param  : el('s-param'),  vParam : el('v-param'), lParam: el('l-param'),
+  speed  : el('s-speed'),  vSpeed : el('v-speed'),
+  seed   : el('i-seed'),   dice   : el('b-dice'),
+  gen    : el('generate'),
+  save   : el('b-save'),   list   : el('seedlist'),
+  json   : el('b-json'),   png    : el('b-png'),
+  stRooms: el('st-rooms'), stBlocks: el('st-blocks'), stFps: el('st-fps'),
+  toast  : el('toast')
+};
+
+let current    = null;   // the layout currently on screen
+let savedSeeds = [];     // in-memory bookmarks (no localStorage, by design)
+
+/* ── Toast ─────────────────────────────────────────────────────────── */
+let toastTimer = null;
+function toast(msg) {
+  ui.toast.textContent = msg;
+  ui.toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ui.toast.classList.remove('show'), 2000);
+}
+
+/* ── The param slider retargets itself per algorithm ───────────────── */
+function syncParamSlider(keepValue) {
+  const a = ALGOS[ui.algo.value];
+  ui.lParam.textContent = a.label;
+  ui.param.min  = a.min;
+  ui.param.max  = a.max;
+  ui.param.step = a.step;
+  if (keepValue === undefined) ui.param.value = a.def;
+  else                         ui.param.value = Math.max(a.min, Math.min(a.max, keepValue));
+  ui.vParam.textContent = ui.param.value + a.suffix;
+}
+
+ui.algo .addEventListener('change', () => { syncParamSlider(); generate(); });
+ui.size .addEventListener('input',  () => ui.vSize.textContent  = ui.size.value);
+ui.param.addEventListener('input',  () => ui.vParam.textContent = ui.param.value + ALGOS[ui.algo.value].suffix);
+ui.speed.addEventListener('input',  () => ui.vSpeed.textContent = (+ui.speed.value).toFixed(1) + '×');
+
+/* ── Random seed ───────────────────────────────────────────────────── */
+const SEED_WORDS = ['crypt','forge','abyss','vault','rune','ember','shard','grim',
+                    'hollow','wyrm','mire','ashen','thorn','sable','gloom','warden'];
+
+ui.dice.addEventListener('click', () => {
+  ui.seed.value = SEED_WORDS[Math.floor(Math.random() * SEED_WORDS.length)] +
+                  '-' + String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+  generate();
+});
+
+/* ── Generate ──────────────────────────────────────────────────────── */
+function generate() {
+  const opts = {
+    algorithm : ui.algo.value,
+    size      : parseInt(ui.size.value, 10),
+    param     : parseInt(ui.param.value, 10),
+    seed      : ui.seed.value.trim() || 'ideate-001'
+  };
+
+  current = generateLayout(opts);
+  const info = buildLayout(current, parseFloat(ui.speed.value));
+
+  ui.stRooms.textContent  = current.rooms.length;
+  ui.stBlocks.textContent = info.total.toLocaleString();
+
+  ui.gen.disabled = true;                       // debounce rapid double-clicks
+  setTimeout(() => { ui.gen.disabled = false; }, 250);
+}
+
+ui.gen.addEventListener('click', generate);
+
+/* ── Saved seeds (in-memory bookmark list) ─────────────────────────── */
+function renderSeedList() {
+  ui.list.innerHTML = '';
+
+  if (savedSeeds.length === 0) {
+    ui.list.innerHTML =
+      '<div class="empty-note">No saved seeds yet.<br>Hit ★ when you like a layout.</div>';
+    return;
+  }
+
+  savedSeeds.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'seed-item';
+    row.title = `${ALGOS[s.algorithm].label} · ${s.param}${ALGOS[s.algorithm].suffix} · click to reload`;
+    row.innerHTML =
+      `<span class="tag ${ALGOS[s.algorithm].tag}">${s.algorithm}</span>` +
+      `<span class="nm"></span>` +
+      `<span class="sz">${s.size}²</span>` +
+      `<span class="del" title="Remove">✕</span>`;
+    row.querySelector('.nm').textContent = s.seed;   // textContent → no HTML injection
+
+    // Click the row → restore every parameter and regenerate.
+    row.addEventListener('click', ev => {
+      if (ev.target.classList.contains('del')) return;
+      ui.algo.value = s.algorithm;
+      syncParamSlider(s.param);
+      ui.size.value = s.size;  ui.vSize.textContent = s.size;
+      ui.seed.value = s.seed;
+      generate();
+      toast('Seed restored');
+    });
+
+    row.querySelector('.del').addEventListener('click', () => {
+      savedSeeds.splice(i, 1);
+      renderSeedList();
+    });
+
+    ui.list.appendChild(row);
+  });
+}
+
+function saveCurrentSeed() {
+  if (!current) return;
+  const entry = {
+    algorithm: current.algorithm,
+    seed     : current.seed,
+    size     : current.size,
+    param    : parseInt(ui.param.value, 10)
+  };
+  // Don't bookmark the same algorithm+seed+size twice.
+  const dupe = savedSeeds.some(s =>
+    s.algorithm === entry.algorithm && s.seed === entry.seed && s.size === entry.size);
+  if (dupe) { toast('Already saved'); return; }
+
+  savedSeeds.unshift(entry);
+  renderSeedList();
+  toast('Seed saved');
+}
+
+ui.save.addEventListener('click', saveCurrentSeed);
+ui.json.addEventListener('click', exportJSON);
+ui.png .addEventListener('click', exportPNG);
+
+/* ── Keyboard shortcuts (ignored while typing the seed) ────────────── */
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && e.target.type === 'text') {
+    if (e.key === 'Enter') { e.target.blur(); generate(); }
+    return;
+  }
+  const k = e.key.toLowerCase();
+  if (k === 'g') generate();
+  if (k === 's') saveCurrentSeed();
+  if (k === 'e') exportJSON();
+  if (k === 'r') {
+    camera.position.copy(CAM_HOME);
+    controls.target.set(0, 0, 0);
+    controls.update();
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 11 — RESIZE & RENDER LOOP
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function onResize() {
+  const a = aspect();
+  camera.left = -FRUSTUM * a; camera.right =  FRUSTUM * a;
+  camera.top  =  FRUSTUM;     camera.bottom = -FRUSTUM;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', onResize);
+
+let fpsAccum = 0, fpsFrames = 0, lastFrame = performance.now();
+
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = now - lastFrame;
+  lastFrame = now;
+
+  updateBuild(now);
+
+  // Idle life: slow neon breathing once the build has settled.
+  if (!anim.running && anim.total > 0) {
+    entryLight.intensity = 13 + Math.sin(now * 0.0022) * 3.5;
+    exitLight.intensity  = 13 + Math.sin(now * 0.0022 + Math.PI) * 3.5;
+    const e = 1.1 + Math.sin(now * 0.003) * 0.35;
+    MAT_ENTRY.emissiveIntensity = e;
+    MAT_EXIT.emissiveIntensity  = e;
+    MAT_PROP.emissiveIntensity  = 0.9 + Math.sin(now * 0.0026) * 0.25;
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+
+  fpsAccum += dt; fpsFrames++;
+  if (fpsAccum >= 500) {
+    ui.stFps.textContent = Math.round(1000 / (fpsAccum / fpsFrames));
+    fpsAccum = 0; fpsFrames = 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SECTION 12 — BOOT
+   ═══════════════════════════════════════════════════════════════════════ */
+
+onResize();
+syncParamSlider();
+renderSeedList();
+generate();                       // first layout on load
+requestAnimationFrame(tick);
+
+setTimeout(() => document.getElementById('boot').classList.add('hidden'), 320);
+</script>
+
+<!-- Fallback if the module never runs (offline / CDN blocked) -->
+<script>
+  setTimeout(function () {
+    var boot = document.getElementById('boot');
+    if (boot && !boot.classList.contains('hidden')) {
+      var msg = document.getElementById('boot-msg');
+      msg.className = 'err';
+      msg.textContent = 'Could not load Three.js from the CDN. ' +
+                        'Check your internet connection and refresh the page.';
+      boot.querySelector('.ring').style.display = 'none';
+    }
+  }, 12000);
+</script>
+</body>
+</html>
